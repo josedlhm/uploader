@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+CONF="/etc/field-uploader.conf"
+[[ -f "$CONF" ]] && source "$CONF" || { echo "missing $CONF"; exit 1; }
+
+PROFILE="${PROFILE:-field-uploader}"
+DST="${DST:-s3://example-bucket/device-01}"
+SRC="${SRC:-/data/outbox}"
+COMMON="--only-show-errors --no-progress --size-only"
+[[ -n "${STORAGE_CLASS:-}" ]] && COMMON="$COMMON --storage-class $STORAGE_CLASS"
+
+# prevent overlapping runs
+exec 9>/var/lock/s3-sync-captures.lock
+flock -n 9 || exit 0
+
+find "$SRC" -maxdepth 1 -mindepth 1 -type d | sort | while read -r CAP; do
+  [[ -f "$CAP/.done" ]] || continue
+  BN="$(basename "$CAP")"
+  REMOTE="$DST/$BN"
+  aws --profile "$PROFILE" s3 sync "$CAP" "$REMOTE" $COMMON
+  aws --profile "$PROFILE" s3 sync "$CAP" "$REMOTE" $COMMON
+  rm -rf "$CAP"
+done

@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# $1=iface, $2=event
+CONF="/etc/field-uploader.conf"
+[[ -f "$CONF" ]] && source "$CONF" || true
+PING_HOST="${PING_HOST:-s3.amazonaws.com}"
+
+IFACE="$1"; EVENT="$2"
+[[ "$EVENT" == "up" ]] || exit 0
+
+# only if this interface is Wi-Fi
+nmcli -t -f DEVICE,TYPE dev status | grep -q "^${IFACE}:wifi$" || exit 0
+
+# require internet (avoid captive portals)
+ping -c1 -W2 "$PING_HOST" >/dev/null 2>&1 || exit 0
+
+/usr/local/bin/s3-sync-captures
